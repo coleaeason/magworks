@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import argparse
 from reader import *
 
-version = '0.0.1'
+version = '0.0.2'
 
 def logo():
     print('______  ___              ___       __            ______         \n\

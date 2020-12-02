@@ -1,27 +1,37 @@
 import codecs
 
-""" Parse data from track 1 in ISO format. """
+""" Parse data from track 1 in ISO 7813 format. """
+""" 
+Track 1 looks kinda like this:
+%B4815881002867896^YATES/EUGENE JOHN         ^37829821000123456789?
+"""
+T1_SEPARATOR = '5e'
+
 def ISO_track1(result):
-    # confirm track 1 start sentinel
+    # Confirm track 1 start sentinel '%'
     if len(result) == 0 or result[0] != '25':
         return []
 
-    mpt = codecs.decode(''.join(result), 'hex') + '\\0'
+    # Decode the full track result into plain text hex, have to add a 
+    # null terminator first though
+    fullTrackPlainText = codecs.decode(''.join(result), 'hex') + '\\0'
 
-    fcode = codecs.decode(''.join(result[1:2]), 'hex')
+    # This is usually 'B', 'A' is reserved for proprietary use.
+    formatCode = codecs.decode(''.join(result[1:2]), 'hex')
 
     # iterators to keep track of current data index
+    # These start at 2 because we already processed the first 2 chars
     start = current = 2
 
     for h in result[start:]:
-        if h == '5e': # field separator value
+        if h == T1_SEPARATOR: # field separator value
             break
         current += 1
 
     pan = codecs.decode(''.join(result[start:current]), 'hex')
 
     if pan[:2] == '59': # requires country code
-        cc = codecs.decode(''.join(result[current+1:current+4]), 'hex')
+        countryCode = codecs.decode(''.join(result[current+1:current+4]), 'hex')
         current += 4
     else:
         cc = 'N/A'
@@ -29,22 +39,21 @@ def ISO_track1(result):
 
     start = current
     for h in result[start:]:
-        if h == '5e': # field separator value
+        if h == T1_SEPARATOR: # field separator value
             break
         current += 1
 
-    ch = codecs.decode(''.join(result[start:current]), 'hex').replace('/', ', ')
-
+ 
     current += 1
 
-    if result[current:current+1][0] == '5e': # no expiration date
-        ed = 'N/A'
+    if result[current:current+1][0] == T1_SEPARATOR: # no expiration date
+        expiration = 'N/A'
         current += 1
     else:
-        ed = codecs.decode(''.join(result[current+2:current+4]), 'hex') + '/' + codecs.decode(''.join(result[current:current+2]), 'hex')
+        expiration = codecs.decode(''.join(result[current+2:current+4]), 'hex') + '/' + codecs.decode(''.join(result[current:current+2]), 'hex')
         current += 4
 
-    if result[current:current+3][0] == '5e': # no service code
+    if result[current:current+3][0] == T1_SEPARATOR: # no service code
         sc = 'N/A'
         current += 1
     else:
@@ -65,15 +74,15 @@ def ISO_track1(result):
 
     card_data = []
     card_data.append('Track 1:')
-    card_data.append('  Format Code:\t\t' + fcode)
-    card_data.append('  Country Code:\t\t' + cc)
-    card_data.append('  Primary Account #:\t' + pan)
-    card_data.append('  Card Holder:\t\t' + ch)
-    card_data.append('  Expiration Date:\t' + ed)
-    card_data.append('  Service Code:\t\t' + sc)#TODO add service code description
-    card_data.append('  PVV:\t\t\t' + pv)
-    card_data.append('  Discretionary:\t' + dd)
-    card_data.append('  - MagSpoof plaintext:\t' + mpt)
+    card_data.append(f'  Format Code:\t\t {formatCode}')
+    card_data.append(f'  Country Code:\t\t {cc}')
+    card_data.append(f'  Primary Account #:\t {pan}')
+    card_data.append(f'  Card Holder:\t\t {cardHolderName}')
+    card_data.append(f'  Expiration Date:\t {expiration}')
+    card_data.append(f'  Service Code:\t\t {sc}')#TODO add service code description
+    card_data.append(f'  PVV:\t\t\t {pv}')
+    card_data.append(f'  Discretionary:\t {dd}')
+    card_data.append(f'  - MagSpoof plaintext:\t {fullTrackPlainText}')
 
     return card_data
 

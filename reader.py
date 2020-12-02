@@ -4,16 +4,44 @@ import usb.util
 import time
 import codecs
 
-from codes import *
+from const import *
 from parser import *
 
 """ Class for handling all communication with the MSR Device. """
 class Reader:
     
-    """ Initialize the reader class. """
+    """ Initialize the reader class, device, and claim the device."""
     def __init__(self, vid=VENDOR_ID, pid=PRODUCT_ID):
         self.vid = vid
         self.pid = pid
+
+        print('Locating device...')
+        self.dev = usb.core.find(idVendor = self.vid, idProduct = self.pid)
+
+        # ensure msr exists
+        if self.dev is None:
+            sys.exit('\t\t...failed to locate a magnetic stripe reader. Exiting.')
+        print('\t\t...magnetic stripe reader found.')
+
+        # disable any existing drivers
+        print('Searching for active drivers...')
+        if self.dev.is_kernel_driver_active(0):
+            try:
+                self.dev.detach_kernel_driver(0)
+                print('\t\t...detached existing kernel driver.')
+            except usb.core.USBError as e:
+                sys.exit(f'\t\t...failed to detach an existing kernel driver: {str(e)}')
+        else:
+            print('\t\t...no active drivers found.')
+
+        # set up msr configuration
+        print('Configuring USB device...')
+        try:
+            self.dev.set_configuration()
+            self.dev.reset()
+        except usb.core.USBError as e:
+            sys.exit(f'\t\t...failed to set device configuration: {str(e)}')
+        print('\t\t...set device configuration.\n')
 
     """ Rest card reader interface. """
     def reset(self):
@@ -35,7 +63,7 @@ class Reader:
             sys.exit('MagWorks lost connection to the card reader.')
 
         result = [hex(x) for x in ret]
-        if result[1] == '0x1b' and result[2] == '0x79':
+        if result[1] == '0x1b' and result[2] == '0x79': # <ESC>y
             print('\t\t...connection is up and running.\n')
         else:
             sys.exit('MagWorks lost connection to the card reader.')
@@ -141,12 +169,12 @@ class Reader:
         except usb.core.USBError as e:
             if str(e) == ('[Errno 110] Operation timed out'):
                 return self.read_ISO(iters+1, clone, ms)
-                #sys.exit('Read operation timed out.')
+                # sys.exit('Read operation timed out.')
             else:
                 self.reset()
                 sys.exit('Read operation failed: %s' % str(e))
 
-        #TODO Check on return bytes for better parsing/handling read errors
+        # TODO Check on return bytes for better parsing/handling read errors
         return parse_ISO(data, ms) if not clone else data
 
     """ Read card raw data. Param is timeout checker. """
@@ -178,7 +206,7 @@ class Reader:
 
     def write_RAW(self, iters):
         self.reset()
-        msg = '\xc2%s%s' % (WRITE_RAW, '\x1b\x73\x1b\x01\x04\xa3\xf1\x60\x00\x1b\x02\x0d\xd7\x33\xcc\xd6\x61\xab\x49\x58\x05\x0d\xff\xc0\x00\x1b\x03\x03\xd7\xc8\x00\x3f\x1c')
+        msg = f'\xc2{WRITE_RAW}\x1b\x73\x1b\x01\x04\xa3\xf1\x60\x00\x1b\x02\x0d\xd7\x33\xcc\xd6\x61\xab\x49\x58\x05\x0d\xff\xc0\x00\x1b\x03\x03\xd7\xc8\x00\x3f\x1c'
 
         print(msg)
 
@@ -305,33 +333,3 @@ class Reader:
         result = [hex(x).replace('0x', '') for x in ret]
         print(str(result)) #TODO clean this up
 
-        
-    """ Initialize the device and claim it."""
-    def claim_reader(self):
-        print('Locating device...')
-        self.dev = usb.core.find(idVendor = self.vid, idProduct = self.pid)
-
-        # ensure msr exists
-        if self.dev is None:
-            sys.exit('\t\t...failed to locate a magnetic stripe reader. Exiting.')
-        print('\t\t...magnetic stripe reader found.')
-
-        # disable any existing drivers
-        print('Searching for active drivers...')
-        if self.dev.is_kernel_driver_active(0):
-            try:
-                self.dev.detach_kernel_driver(0)
-                print('\t\t...detached existing kernel driver.')
-            except usb.core.USBError as e:
-                sys.exit('\t\t...failed to detach an existing kernel driver: %s' % str(e))
-        else:
-            print('\t\t...no active drivers found.')
-
-        # set up msr configuration
-        print('Configuring USB device...')
-        try:
-            self.dev.set_configuration()
-            self.dev.reset()
-        except usb.core.USBError as e:
-            sys.exit('\t\t...failed to set device configuration: %s' % str(e))
-        print('\t\t...set device configuration.\n')
